@@ -1,15 +1,33 @@
 /*
 app.js - Simulador de Crédito
-Proyecto Coderhouse, Entrega 3
+Proyecto Coderhouse, Entrega Final
 Ezequiel A. Verón
-*/
-/*Definición de los estados del Simulador
+
+ACERCA DE
+##############################################################################
+La aplicación simula ser un calculador de préstamos. Y como es una utilidad
+relacionada con las finanzas, se conecta a una API para informar los distintos
+dólares que se utilizan en la República Argentina
+##############################################################################
+
+ESTADOS POSIBLES DEL SIMULADOR
+##############################################################################
 0: Inicial: se pide el Nombre y Apellido
 1: Edad: Se pide la edad del aplicante
 2: Importe: Se solicita el importe que el aplicante quiere solicitar
 3: Cuotas: Se pide la cantidad de cuotas en las que desea abonarse el crédito
 4: Renderizado: Se tienen todos los datos y se renderiza el crédito
+##############################################################################
+
+DISCLAIMER SOBRE API EXTERNA
+##############################################################################
+La API elegida es propieda de DolarSi (dolarsi.com), por ende en caso de
+actualizar la misma o que se pierda disponibilidad, el sistema probablemente
+falle
+##############################################################################
 */
+
+//Clase del Crédito, con los datos del solicitante, importe y estado del mismo
 class Credito {
     constructor(estado, nombreApellido, edad, importe, cuotas) {
         this.estado = estado;
@@ -31,6 +49,68 @@ class Credito {
     setEdad = (edad) => this.edad = edad;
     setImporte = (importe) => this.importe = importe;
     setCuotas = (cuotas) => this.cuotas = cuotas;
+}
+
+//Clase Dólares
+class Dolares {
+    constructor(cotizacion, tipoDolar, fechaActualizacion) {
+        this.cotizacion = cotizacion;
+        this.tipoDolar = tipoDolar;
+        this.fechaActualizacion = fechaActualizacion;
+    }
+}
+
+//Clase con la configuración del simulador
+class Simulador {
+    constructor(interes, edadMinima, edadMaxima, impMinimoPermitido, impMaximoPermitido, cuotasMinimas, cuotasMaximas) {
+        this.interes = interes;
+        this.edadMinima = edadMinima;
+        this.edadMaxima = edadMaxima;
+        this.impMinimoPermitido = impMinimoPermitido;
+        this.impMaximoPermitido = impMaximoPermitido;
+        this.cuotasMinimas = cuotasMinimas;
+        this.cuotasMaximas = cuotasMaximas;
+    }
+}
+
+//Clase para el manejo de errores
+class ManejoErrores {
+    constructor(resultado = false, codigo = false) {
+        this.resultado = resultado;
+        this.codigo = codigo;
+    }
+    obtenerMensajeError = () => mensajesDeError[this.codigo];
+}
+
+//Inicialización del array que tendrá los dólares
+let dolares = [];
+
+//Conexión a la API para obtener el Dólar
+const consultarDolar = () => {
+    const url = 'https://www.dolarsi.com/api/api.php?type=valoresprincipales';
+    fetch(url)
+        .then((respuesta) => {
+            if (!respuesta.ok) {
+                throw new Error('Respuesta inválida');
+            } else {
+                return respuesta.json();
+            }
+        })
+        .then((datosJson) => { //Si el resultado fue el esperado, cargo los dólares en el array
+            for (datosDolar of datosJson) {
+                dolares.push(new Dolares(parseFloat(datosDolar['casa'].venta.replace(",", ".")), datosDolar['casa'].nombre, new Date().toLocaleString()));
+            }
+            localStorage.setItem('cotizacionesDolares', JSON.stringify(dolares));
+        })
+        .catch((error) => {
+            if (localStorage.getItem('cotizacionesDolares')) { //Si hay datos guardados en el Local Storage, los uso como 'caché' ya que no pude conectarme a la API
+                dolares = JSON.parse(localStorage.getItem('cotizacionesDolares'));
+            }
+
+        })
+        .finally(() => {
+            cuadroDolares.innerHTML = renderDolares(dolares);
+        });
 }
 
 //Reset del Préstamo Guardado
@@ -66,28 +146,7 @@ mensajesDeError[101] = "No podemos otorgarte un préstamo ya que no cumples con 
 mensajesDeError[102] = "El importe que has solicitado no se encuentra en el rango correcto. Por favor, vuelve a intentarlo";
 mensajesDeError[103] = "Las cuotas que especificaste no son correctas. Por favor, vuelve a intentarlo.";
 
-//Clase con la configuración del simulador
-class Simulador {
-    constructor(interes, edadMinima, edadMaxima, impMinimoPermitido, impMaximoPermitido, cuotasMinimas, cuotasMaximas) {
-        this.interes = interes;
-        this.edadMinima = edadMinima;
-        this.edadMaxima = edadMaxima;
-        this.impMinimoPermitido = impMinimoPermitido;
-        this.impMaximoPermitido = impMaximoPermitido;
-        this.cuotasMinimas = cuotasMinimas;
-        this.cuotasMaximas = cuotasMaximas;
-    }
-}
-
-//Clase para el manejo de errores
-class ManejoErrores {
-    constructor(resultado = false, codigo = false) {
-        this.resultado = resultado;
-        this.codigo = codigo;
-    }
-    obtenerMensajeError = () => mensajesDeError[this.codigo];
-}
-
+//Función que facilita en envío del Toast
 const enviarNotificacion = (tipoNotificacion, mensaje, duracionSegundos = 3) => {
     let bgToast = '';
     if (tipoNotificacion == 'error') {
@@ -126,7 +185,6 @@ const handlerPasoSiguiente = () => {
                 credito.setEstado(credito.getEstado() + 1);
                 sessionStorage.setItem('credito', JSON.stringify(credito));
                 inputRequerimiento.value = '';
-
                 renderHTML();
             }
             break;
@@ -140,7 +198,6 @@ const handlerPasoSiguiente = () => {
                 credito.setEstado(credito.getEstado() + 1);
                 sessionStorage.setItem('credito', JSON.stringify(credito));
                 inputRequerimiento.value = '';
-
                 renderHTML();
             }
             break;
@@ -172,22 +229,23 @@ const handlerPasoSiguiente = () => {
     }
 
 }
+
 //Captura de elementos del DOM
 const btnAnterior = document.querySelector(".btnAnterior");
-btnAnterior.addEventListener('click', handlerPasoAnterior);
-
 const btnReset = document.querySelector(".btnReset");
-btnReset.addEventListener('click', resetPrestamo);
-
 const btnSiguiente = document.querySelector(".btnSiguiente");
-btnSiguiente.addEventListener('click', handlerPasoSiguiente);
-
 const labelRequerimiento = document.querySelector(".labelRequerimiento");
 const inputRequerimiento = document.querySelector(".inputRequerimiento");
 const cuadroSimulador = document.querySelector(".cuadroSimulador");
 const divTablaCuotas = document.querySelector(".divTablaCuotas");
 const divTablaResumen = document.querySelector(".divTablaResumen");
 const subtitulo = document.querySelector(".subtitulo");
+const cuadroDolares = document.querySelector(".cuadroDolares");
+
+//Adición de Escucha de Eventos para los Botones
+btnAnterior.addEventListener('click', handlerPasoAnterior);
+btnReset.addEventListener('click', resetPrestamo);
+btnSiguiente.addEventListener('click', handlerPasoSiguiente);
 
 //Función que arma el subtítulo según los datos que tengo cargados
 const armadoSubtitulo = () => {
@@ -254,7 +312,7 @@ const renderHTML = () => {
             btnAnterior.style.display = '';
             btnReset.style.display = '';
             btnSiguiente.style.display = '';
-            cuadroSimulador.style.display = '';
+            cuadroSimulador.style.visibility = '';
             btnSiguiente.className = 'btn btn-success';
             btnSiguiente.innerHTML = 'Calcular';
             if (credito.getCuotas() > 0) {
@@ -282,6 +340,25 @@ const renderHTML = () => {
             break;
     }
     armadoSubtitulo();
+}
+
+//Función que renderiza la tabla de Dólares
+const renderDolares = (dolares) => {
+    let salida = "<table class='table table-bordered table-striped'>";
+    salida += "<thead><tr><td><strong>Dólar</strong></td><td><strong>Cotización</strong></td><td><strong>Actualización</strong></td></tr></thead><tbody>";
+    if (dolares.length != 0) {
+        for (dolar of dolares) {
+            let cot = dolar.cotizacion;
+            if (isNaN(cot) || cot === null) {
+                cot = 0;
+            }
+            salida += "<tr><td>" + dolar.tipoDolar + "</td><td>" + cot.toFixed(2) + "</td><td>" + dolar.fechaActualizacion + "</td></tr>";
+        }
+    } else {
+        salida += "<tr><td colspan='3'>(No tenemos cotizaciones disponible aún)</td></tr>";
+    }
+    salida += "</tbody></table>";
+    return salida;
 }
 
 //Armado de Tablas de Cuotas y Resumen
@@ -363,3 +440,4 @@ if (credito.getEstado() !== 0) {
 
 //Renderización inicial
 renderHTML();
+consultarDolar();
